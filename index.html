@@ -1001,80 +1001,117 @@
   </div>
 
   <!-- SCRIPT UTAMA & LOGIC (100% UTUH) -->
+  <script src="[https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2](https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2)"></script>
   <script>
-    // =========================================================
-    // KONFIGURASI BACKEND FIREBASE (Firestore)
-    // =========================================================
-    const firebaseConfig = {
-      apiKey: "AIzaSyCZwxhqyOvPq6ZwZaKaYRcyH-MxvfaaIas",
-      authDomain: "teacher-s-workbook.firebaseapp.com",
-      projectId: "teacher-s-workbook",
-      storageBucket: "teacher-s-workbook.firebasestorage.app",
-      messagingSenderId: "198376447223",
-      appId: "1:198376447223:web:a4210067cadc110d4e47f2",
-      measurementId: "G-KQXQXMRWQK"
-    };
+// ======================================================================
+// KONFIGURASI BACKEND SUPABASE (Pengganti Firestore)
+// ======================================================================
 
-    firebase.initializeApp(firebaseConfig);
-    const fsDb = firebase.firestore();
-    fsDb.settings({ ignoreUndefinedProperties: true }); // biar field _rev lama yg undefined tidak error
+// Masukkan URL dan Key Supabase Anda (Dapatkan di Dashboard Supabase > Settings > API)
+const supabaseUrl = 'https://wbnylogfeluzesnlrpxx.supabase.co/rest/v1/'; // GANTI DENGAN URL ANDA
+const supabaseKey = 'sb_publishable_tP90rm0YofD-6SIvPriwGw_5of4KiLG'; // GANTI DENGAN ANON KEY ANDA
 
-    // Wrapper agar API-nya sama persis dengan sebelumnya (get/put/remove/allDocs/putBulk/removeBulk)
-    // supaya semua kode di bawah ini tidak perlu diubah lagi.
-    class FirestoreDB {
-      constructor(collectionName) {
-        this.col = fsDb.collection(collectionName);
-      }
-      async get(id) {
-        const snap = await this.col.doc(String(id)).get();
-        if (!snap.exists) {
-          const err = new Error('not_found');
-          err.name = 'not_found';
-          throw err;
-        }
-        return { _id: snap.id, ...snap.data() };
-      }
-      async put(doc) {
-        const { _id, ...data } = doc;
-        await this.col.doc(String(_id)).set(data);
-        return doc;
-      }
-      async update(id, partialData) {
-        await this.col.doc(String(id)).update(partialData);
-        return { ok: true };
-      }
-      async remove(doc) {
-        await this.col.doc(String(doc._id)).delete();
-        return { ok: true };
-      }
-      async allDocs({ include_docs } = {}) {
-        const snap = await this.col.get();
-        return { rows: snap.docs.map(d => ({ id: d.id, doc: { _id: d.id, ...d.data() } })) };
-      }
-      async putBulk(docsArray) {
-        if (!docsArray || docsArray.length === 0) return { ok: true, count: 0 };
-        // Firestore batas 500 operasi per batch — dipecah aman untuk kelas besar sekalipun
-        for (let i = 0; i < docsArray.length; i += 400) {
-          const batch = fsDb.batch();
-          docsArray.slice(i, i + 400).forEach(doc => {
-            const { _id, ...data } = doc;
-            batch.set(this.col.doc(String(_id)), data);
-          });
-          await batch.commit();
-        }
-        return { ok: true, count: docsArray.length };
-      }
-      async removeBulk(idsArray) {
-        if (!idsArray || idsArray.length === 0) return { ok: true };
-        for (let i = 0; i < idsArray.length; i += 400) {
-          const batch = fsDb.batch();
-          idsArray.slice(i, i + 400).forEach(id => batch.delete(this.col.doc(String(id))));
-          await batch.commit();
-        }
-        return { ok: true };
-      }
+const supabaseClient = supabase.createClient(supabaseUrl, supabaseKey);
+
+// Wrapper agar API-nya sama persis dengan sebelumnya (get/put/remove/allDocs/putBulk/removeBulk)
+// supaya semua kode di bawah baris 1076 tidak perlu diubah lagi.
+class FirestoreDB {
+    constructor(collectionName) {
+        // collectionName sekarang menjadi nama tabel di Supabase
+        // Karena di Supabase Anda menggunakan huruf kecil (users, siswa, dll), 
+        // kita ubah inputnya menjadi lowercase (opsional, untuk mencegah error case-sensitive)
+        this.tableName = collectionName.toLowerCase(); 
     }
 
+    async get(id) {
+        const { data, error } = await supabaseClient
+            .from(this.tableName)
+            .select('*')
+            .eq('_id', String(id))
+            .single();
+
+        if (error) {
+            if (error.code === 'PGRST116') { 
+                const err = new Error('not_found');
+                err.name = 'not_found';
+                throw err;
+            }
+            throw error;
+        }
+        
+        return data; 
+    }
+
+    async put(doc) {
+        const { data, error } = await supabaseClient
+            .from(this.tableName)
+            .upsert([doc]) 
+            .select()
+            .single();
+
+        if (error) throw error;
+        return data || doc;
+    }
+
+    async update(id, partialData) {
+        const { error } = await supabaseClient
+            .from(this.tableName)
+            .update(partialData)
+            .eq('_id', String(id));
+
+        if (error) throw error;
+        return { ok: true };
+    }
+
+    async remove(doc) {
+        const { error } = await supabaseClient
+            .from(this.tableName)
+            .delete()
+            .eq('_id', String(doc._id));
+
+        if (error) throw error;
+        return { ok: true };
+    }
+
+    async allDocs({ include_docs } = {}) {
+        const { data, error } = await supabaseClient
+            .from(this.tableName)
+            .select('*');
+
+        if (error) throw error;
+
+        return { 
+            rows: data.map(doc => ({ 
+                id: doc._id, 
+                doc: doc 
+            })) 
+        };
+    }
+
+    async putBulk(docsArray) {
+        if (!docsArray || docsArray.length === 0) return { ok: true, count: 0 };
+
+        const { error } = await supabaseClient
+            .from(this.tableName)
+            .upsert(docsArray);
+
+        if (error) throw error;
+        return { ok: true, count: docsArray.length };
+    }
+
+    // Menambahkan fungsi removeBulk sesuai gambar di baris 1067
+    async removeBulk(idsArray) {
+        if (!idsArray || idsArray.length === 0) return { ok: true };
+
+        const { error } = await supabaseClient
+            .from(this.tableName)
+            .delete()
+            .in('_id', idsArray.map(String)); // Menghapus banyak baris sekaligus berdasarkan array ID
+
+        if (error) throw error;
+        return { ok: true };
+    }
+}
     const dbUsers = new FirestoreDB('Users');
     const dbSiswa = new FirestoreDB('Siswa');
     const dbAbsen = new FirestoreDB('Absen');
