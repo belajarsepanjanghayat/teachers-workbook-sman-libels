@@ -1,3 +1,5 @@
+
+
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -1001,7 +1003,7 @@
   </div>
 
   <!-- SCRIPT UTAMA & LOGIC (100% UTUH) -->
-  <script src="[https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2](https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2)"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
 // ======================================================================
 // KONFIGURASI BACKEND SUPABASE (Pengganti Firestore)
@@ -3216,20 +3218,41 @@ class FirestoreDB {
         return;
       }
 
-      docs.reverse().forEach(d => {
+      // Kelompokkan per kelas, lalu urutkan tanggal kronologis di dalam tiap kelas
+      // supaya progres mengajarnya kelihatan urut (bukan tercampur antar kelas).
+      const perKelas = {};
+      docs.forEach(d => {
+        perKelas[d.kelas] = perKelas[d.kelas] || [];
+        perKelas[d.kelas].push(d);
+      });
+
+      const daftarKelas = Object.keys(perKelas).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+
+      daftarKelas.forEach(kelas => {
+        const entriKelas = perKelas[kelas].sort((a, b) => new Date(a.tanggal) - new Date(b.tanggal));
+
         cont.innerHTML += `
-          <div class="p-4 bg-slate-50/80 rounded-2xl border border-slate-200/60 flex justify-between items-start gap-4 hover:border-slate-300 transition shadow-sm">
-            <div>
-              <div class="flex items-center gap-2">
-                <span class="text-[10px] font-extrabold bg-[#e8f0fe] text-[#1a73e8] px-2.5 py-0.5 rounded-full border border-blue-100">${d.kelas}</span>
-                <span class="text-xs font-bold text-slate-600">${d.tanggal} (${d.jam})</span>
-              </div>
-              <h4 class="font-extrabold text-sm text-slate-800 mt-1.5">${d.materi}</h4>
-              <p class="text-xs text-slate-500 mt-1 font-medium">${d.catatan || 'Tidak ada catatan khusus.'}</p>
-            </div>
-            <button onclick="hapusJurnal('${d._id}')" class="text-rose-500 hover:text-rose-700 text-[11px] font-bold bg-white px-2.5 py-1 rounded-xl border border-slate-200 shadow-sm">Hapus</button>
+          <div class="flex items-center gap-2 mt-2 mb-1 first:mt-0">
+            <span class="text-xs font-extrabold text-[#1a73e8] bg-[#e8f0fe] px-3 py-1 rounded-full border border-blue-100">${kelas}</span>
+            <span class="text-[11px] text-slate-400 font-semibold">${entriKelas.length} pertemuan tercatat</span>
           </div>
         `;
+
+        entriKelas.forEach((d, idx) => {
+          cont.innerHTML += `
+            <div class="p-4 bg-slate-50/80 rounded-2xl border border-slate-200/60 flex justify-between items-start gap-4 hover:border-slate-300 transition shadow-sm">
+              <div class="flex gap-3">
+                <div class="w-7 h-7 shrink-0 rounded-full bg-white border border-slate-200 flex items-center justify-center text-[10px] font-black text-slate-500">${idx + 1}</div>
+                <div>
+                  <span class="text-xs font-bold text-slate-600">${d.tanggal} (${d.jam})</span>
+                  <h4 class="font-extrabold text-sm text-slate-800 mt-1">${d.materi}</h4>
+                  <p class="text-xs text-slate-500 mt-1 font-medium">${d.catatan || 'Tidak ada catatan khusus.'}</p>
+                </div>
+              </div>
+              <button onclick="hapusJurnal('${d._id}')" class="text-rose-500 hover:text-rose-700 text-[11px] font-bold bg-white px-2.5 py-1 rounded-xl border border-slate-200 shadow-sm shrink-0">Hapus</button>
+            </div>
+          `;
+        });
       });
     }
 
