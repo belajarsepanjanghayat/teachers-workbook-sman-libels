@@ -1010,7 +1010,7 @@
 // ======================================================================
 
 // Masukkan URL dan Key Supabase Anda (Dapatkan di Dashboard Supabase > Settings > API)
-const supabaseUrl = 'https://wbnylogfeluzesnlrpxx.supabase.co/rest/v1/'; // GANTI DENGAN URL ANDA
+const supabaseUrl = 'https://wbnylogfeluzesnlrpxx.supabase.co'; // GANTI DENGAN URL ANDA
 const supabaseKey = 'sb_publishable_tP90rm0YofD-6SIvPriwGw_5of4KiLG'; // GANTI DENGAN ANON KEY ANDA
 
 const supabaseClient = supabase.createClient(supabaseUrl, supabaseKey);
@@ -3220,16 +3220,16 @@ class FirestoreDB {
 
       // Kelompokkan per kelas, lalu urutkan tanggal kronologis di dalam tiap kelas
       // supaya progres mengajarnya kelihatan urut (bukan tercampur antar kelas).
-      const perKelas = {};
+      const perKelasJurnal = {};
       docs.forEach(d => {
-        perKelas[d.kelas] = perKelas[d.kelas] || [];
-        perKelas[d.kelas].push(d);
+        perKelasJurnal[d.kelas] = perKelasJurnal[d.kelas] || [];
+        perKelasJurnal[d.kelas].push(d);
       });
 
-      const daftarKelas = Object.keys(perKelas).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+      const daftarKelasJurnal = Object.keys(perKelasJurnal).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
 
-      daftarKelas.forEach(kelas => {
-        const entriKelas = perKelas[kelas].sort((a, b) => new Date(a.tanggal) - new Date(b.tanggal));
+      daftarKelasJurnal.forEach(kelas => {
+        const entriKelas = perKelasJurnal[kelas].sort((a, b) => new Date(a.tanggal) - new Date(b.tanggal));
 
         cont.innerHTML += `
           <div class="flex items-center gap-2 mt-2 mb-1 first:mt-0">
