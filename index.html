@@ -26,6 +26,19 @@
   <!-- Supabase untuk backend -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 
+  <script>
+    // Penampil error otomatis di layar, supaya kelihatan tanpa perlu buka F12/Console.
+    window.addEventListener('error', function (e) {
+      const box = document.createElement('div');
+      box.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:99999;background:#7f1d1d;color:#fff;padding:14px 18px;font:12px monospace;max-height:40vh;overflow:auto;white-space:pre-wrap;';
+      box.innerHTML = '<b>⚠️ ERROR TERDETEKSI (screenshot ini):</b>\n' +
+        'Pesan: ' + e.message + '\n' +
+        'File: ' + (e.filename || '-') + ' baris ' + (e.lineno || '-') + '\n' +
+        '<button onclick="this.parentElement.remove()" style="margin-top:8px;background:#fff;color:#7f1d1d;border:none;padding:4px 10px;border-radius:6px;font-weight:bold;">Tutup</button>';
+      document.body.appendChild(box);
+    });
+  </script>
+
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
     body { 
@@ -977,11 +990,11 @@
     // KONFIGURASI BACKEND SUPABASE (dulu Firebase Firestore)
     // =========================================================
     const supabaseConfig = {
-      url: "https://wbnylogfeluzesnlrpxx.supabase.co",   // <-- ganti dengan Project URL Supabase Anda
-      anonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indibnlsb2dmZWx1emVzbmxycHh4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc0NjQ3MjYsImV4cCI6MjEwMzA0MDcyNn0.6GUEebsYyc-XWK8oYtGcpTHpf5fkT2wYD1lxe-h1bl4"   // <-- ganti dengan anon/public key Supabase Anda
+      url: "https://xxxxxxxxxxxx.supabase.co",   // <-- ganti dengan Project URL Supabase Anda
+      anonKey: "TEMPEL_ANON_PUBLIC_KEY_DI_SINI"   // <-- ganti dengan anon/public key Supabase Anda
     };
 
-    const supabase = window.supabase.createClient(supabaseConfig.url, supabaseConfig.anonKey);
+    const supabaseClient = window.supabase.createClient(supabaseConfig.url, supabaseConfig.anonKey);
 
     // Wrapper agar API-nya sama persis dengan sebelumnya (get/put/update/remove/allDocs/putBulk/removeBulk)
     // supaya semua kode di bawah ini (ratusan pemanggilan dbSiswa/dbAbsen/dst) TIDAK perlu diubah lagi.
@@ -991,7 +1004,7 @@
         this.table = tableName.toLowerCase();
       }
       async get(id) {
-        const { data, error } = await supabase
+        const { data, error } = await supabaseClient
           .from(this.table)
           .select('id, data')
           .eq('id', String(id))
@@ -1006,7 +1019,7 @@
       }
       async put(doc) {
         const { _id, ...data } = doc;
-        const { error } = await supabase
+        const { error } = await supabaseClient
           .from(this.table)
           .upsert({ id: String(_id), data }, { onConflict: 'id' });
         if (error) throw error;
@@ -1017,14 +1030,14 @@
         const existing = await this.get(id).catch(() => null);
         const merged = { ...(existing || {}), ...partialData };
         delete merged._id;
-        const { error } = await supabase
+        const { error } = await supabaseClient
           .from(this.table)
           .upsert({ id: String(id), data: merged }, { onConflict: 'id' });
         if (error) throw error;
         return { ok: true };
       }
       async remove(doc) {
-        const { error } = await supabase.from(this.table).delete().eq('id', String(doc._id));
+        const { error } = await supabaseClient.from(this.table).delete().eq('id', String(doc._id));
         if (error) throw error;
         return { ok: true };
       }
@@ -1035,7 +1048,7 @@
         let from = 0;
         const PAGE = 1000;
         while (true) {
-          const { data, error } = await supabase
+          const { data, error } = await supabaseClient
             .from(this.table)
             .select('id, data')
             .range(from, from + PAGE - 1);
@@ -1053,7 +1066,7 @@
             const { _id, ...data } = doc;
             return { id: String(_id), data };
           });
-          const { error } = await supabase.from(this.table).upsert(chunk, { onConflict: 'id' });
+          const { error } = await supabaseClient.from(this.table).upsert(chunk, { onConflict: 'id' });
           if (error) throw error;
         }
         return { ok: true, count: docsArray.length };
@@ -1062,7 +1075,7 @@
         if (!idsArray || idsArray.length === 0) return { ok: true };
         for (let i = 0; i < idsArray.length; i += 400) {
           const chunk = idsArray.slice(i, i + 400).map(String);
-          const { error } = await supabase.from(this.table).delete().in('id', chunk);
+          const { error } = await supabaseClient.from(this.table).delete().in('id', chunk);
           if (error) throw error;
         }
         return { ok: true };
@@ -4149,6 +4162,29 @@
     }
     let rahasiaKlik = 0;
     let modeOperatorAktif = false;
+
+    function bukaPanelOperator() {
+      modeOperatorAktif = true;
+      document.getElementById('user-profile-badge').classList.remove('view-hidden');
+      document.getElementById('badge-role').innerText = "OPERATOR";
+      document.getElementById('badge-name').innerText = "Super Admin DB";
+      document.getElementById('view-login').classList.add('view-hidden');
+      document.getElementById('view-operator').classList.remove('view-hidden');
+      renderTabelOperator();
+      updateSelectGuruOperator();
+      loadStatistikOperator();
+    }
+
+    // Jalan pintas: buka langsung lewat URL, misalnya
+    // https://namasitus.com/?operator=admin15
+    // (tidak perlu klik 5x kalau F12/console tidak bisa dipakai untuk debug)
+    (function cekJalanPintasOperator() {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('operator') === 'admin15') {
+        bukaPanelOperator();
+      }
+    })();
+
     document.getElementById('secret-footer').addEventListener('click', () => {
       rahasiaKlik++;
       if (rahasiaKlik >= 5) {
@@ -4156,15 +4192,7 @@
         const pass = prompt("Masukkan Kode Rahasia System Operator SMAN 15:");
         if (pass === "admin15") {
           alert("Akses Operator Terbuka! Selamat datang di Panel DB.");
-          modeOperatorAktif = true;
-          document.getElementById('user-profile-badge').classList.remove('view-hidden');
-          document.getElementById('badge-role').innerText = "OPERATOR";
-          document.getElementById('badge-name').innerText = "Super Admin DB";
-          document.getElementById('view-login').classList.add('view-hidden');
-          document.getElementById('view-operator').classList.remove('view-hidden');
-          renderTabelOperator();
-          updateSelectGuruOperator();
-          loadStatistikOperator();
+          bukaPanelOperator();
         } else {
           alert("Kode rahasia salah!");
         }
