@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -16,15 +17,14 @@
 
   <!-- TAILWIND CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Backend: Firebase Firestore (lihat FirestoreDB di bagian <script> bawah) -->
+  <!-- Backend: Supabase (lihat SupabaseDB di bagian <script> bawah) -->
   <!-- jsPDF untuk fitur Download PDF -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
   <!-- SheetJS untuk fitur Download Excel -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <!-- Firebase (Firestore) untuk backend -->
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <!-- Supabase untuk backend -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
@@ -73,7 +73,7 @@
         <img id="badge-foto-profil" class="view-hidden w-6 h-6 rounded-full object-cover border border-slate-300 shrink-0" src="" alt="Foto Profil">
         <span id="badge-role" class="text-[10px] font-extrabold px-2 sm:px-2.5 py-0.5 rounded-full bg-[#1a73e8] text-white uppercase tracking-wider shrink-0">Role</span>
         <span id="badge-name" class="text-xs font-semibold text-slate-700 pr-1 max-w-[70px] sm:max-w-none truncate hidden sm:inline">Nama Pengguna</span>
-        <button onclick="location.reload()" class="text-xs text-slate-500 hover:text-[#1a73e8] font-bold pl-1.5 sm:pl-2 border-l border-slate-300 transition shrink-0" title="Muat ulang data terbaru"><span class="sm:hidden">🔄</span><span class="hidden sm:inline">🔄 Refresh</span></button>
+        <button onclick="refreshData()" id="btn-refresh-data" class="text-xs text-slate-500 hover:text-[#1a73e8] font-bold pl-1.5 sm:pl-2 border-l border-slate-300 transition shrink-0" title="Muat ulang data terbaru"><span class="sm:hidden">🔄</span><span class="hidden sm:inline">🔄 Refresh</span></button>
         <button onclick="logout()" class="text-xs text-red-500 hover:text-red-700 font-bold pl-1.5 sm:pl-2 border-l border-slate-300 transition shrink-0" title="Keluar"><span class="sm:hidden">⎋</span><span class="hidden sm:inline">Keluar ⎋</span></button>
       </div>
     </div>
@@ -279,6 +279,15 @@
 
       <!-- SUB-TAB 2: ABSENSI PER PERTEMUAN -->
       <div id="subtab-guru-absen" class="view-hidden space-y-6">
+        <div id="banner-absen-lama" class="view-hidden p-5 rounded-2xl bg-amber-50 border border-amber-200 flex flex-wrap items-center justify-between gap-3">
+          <div class="text-xs font-semibold text-amber-800">
+            <span class="font-extrabold">⚠️ Ditemukan <span id="jumlah-absen-lama">0</span> data absensi format lama</span> (dari sebelum "Pertemuan Ke-" dihapus). Data ini masih ada, tapi belum tergabung ke tampilan spreadsheet yang baru.
+          </div>
+          <button onclick="perbaikiDataAbsenLama()" id="btn-perbaiki-absen-lama" class="text-xs bg-amber-600 hover:bg-amber-700 text-white font-bold px-4 py-2 rounded-xl shadow-sm transition shrink-0">
+            🔧 Gabungkan ke Format Baru
+          </button>
+        </div>
+
         <div class="bg-white p-6 md:p-8 rounded-3xl shadow-[0_2px_12px_rgba(0,0,0,0.03)] border border-slate-200/60">
           <h3 class="font-extrabold text-lg text-slate-800 mb-6 flex items-center gap-2">
             <span>📅</span> Lembar Absensi Siswa
@@ -351,73 +360,35 @@
 
       <!-- SUB-TAB 3: BUKU NILAI -->
       <div id="subtab-guru-nilai" class="view-hidden space-y-6">
-        <div class="bg-white p-6 md:p-8 rounded-3xl shadow-[0_2px_12px_rgba(0,0,0,0.03)] border border-slate-200/60">
-          <h3 class="font-extrabold text-lg text-slate-800 mb-6 flex items-center gap-2">
-            <span>📊</span> Input Nilai Penilaian
-          </h3>
-          <input type="hidden" id="nilai-edit-doc-id" value="">
-
-          <div class="grid grid-cols-1 md:grid-cols-4 gap-4 bg-slate-50/80 p-5 rounded-2xl border border-slate-200/60 mb-8 text-xs font-bold text-slate-600">
-            <div>
-              <label class="block mb-1.5 text-slate-500 uppercase tracking-wider text-[10px]">Pilih Kelas:</label>
-              <select id="nilai-pilih-kelas" onchange="loadSiswaUntukNilai()" class="w-full p-2.5 border rounded-xl bg-white font-semibold text-slate-800 focus:ring-2 focus:ring-[#1a73e8]/20 focus:outline-none"></select>
-            </div>
-            <div>
-              <label class="block mb-1.5 text-slate-500 uppercase tracking-wider text-[10px]">Kategori Nilai:</label>
-              <select id="nilai-kategori" class="w-full p-2.5 border rounded-xl bg-white font-semibold text-slate-800 focus:ring-2 focus:ring-[#1a73e8]/20 focus:outline-none">
-                <option value="tugas" id="opt-bobot-tugas">📝 Nilai Tugas / LKPD (Bobot 30%)</option>
-                <option value="ujian" id="opt-bobot-ujian">🎯 Assessment / Ujian (Bobot 50%)</option>
-              </select>
-            </div>
-            <div>
-              <label class="block mb-1.5 text-slate-500 uppercase tracking-wider text-[10px]">Judul Penilaian:</label>
-              <input type="text" id="nilai-judul" placeholder="Contoh: Tugas 1 / UH 1 / UTS" class="w-full p-2.5 border rounded-xl bg-white font-semibold text-slate-800 focus:ring-2 focus:ring-[#1a73e8]/20 focus:outline-none">
-            </div>
-            <div class="flex items-end">
-              <button onclick="loadSiswaUntukNilai()" class="w-full py-2.5 bg-[#1a73e8] hover:bg-[#1557b0] text-white font-bold rounded-xl shadow-md transition">
-                📝 Buat Lembar Nilai
-              </button>
-            </div>
-          </div>
-
-          <div id="nilai-list-container" class="view-hidden space-y-4">
-            <div class="flex justify-between items-center border-b border-slate-100 pb-4">
-              <div>
-                <span class="text-sm font-extrabold text-slate-800" id="nilai-label-info">Input Nilai Siswa</span>
-                <p id="nilai-autosave-status" class="text-[11px] text-slate-400 font-semibold mt-0.5">💾 Nilai tersimpan otomatis setiap ada perubahan</p>
-              </div>
-              <button id="btn-simpan-nilai" onclick="simpanNilaiManual()" class="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md shadow-emerald-500/20 transition disabled:opacity-60 disabled:cursor-not-allowed">
-                💾 Simpan Sekarang
-              </button>
-            </div>
-            <div class="overflow-x-auto">
-              <table class="w-full text-left text-sm border-collapse">
-                <thead>
-                  <tr class="bg-slate-50 text-[11px] uppercase text-slate-400 font-extrabold border-b border-slate-200/80">
-                    <th class="p-3.5 w-16 text-center">No</th>
-                    <th class="p-3.5">NIS</th>
-                    <th class="p-3.5">Nama Siswa</th>
-                    <th class="p-3.5 text-center w-48">Nilai Angka (0 - 100)</th>
-                  </tr>
-                </thead>
-                <tbody id="tabel-nilai-body" class="divide-y divide-slate-100"></tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
-        <!-- TAMPILAN SPREADSHEET BUKU NILAI PER KELAS -->
+        <!-- TAMPILAN SPREADSHEET BUKU NILAI PER KELAS (SATU-SATUNYA CARA INPUT/EDIT) -->
         <div class="bg-white p-6 md:p-8 rounded-3xl shadow-[0_2px_12px_rgba(0,0,0,0.03)] border border-slate-200/60">
           <div class="flex flex-wrap justify-between items-center gap-3 mb-2">
             <h3 class="font-extrabold text-lg text-slate-800 flex items-center gap-2">
-              <span>🗂️</span> Buku Nilai per Kelas (Tampilan Spreadsheet)
+              <span>🗂️</span> Buku Nilai per Kelas
             </h3>
             <div class="flex items-center gap-2">
               <select id="spreadsheet-pilih-kelas" onchange="loadSpreadsheetNilai()" class="p-2 border rounded-xl bg-white text-xs font-semibold text-slate-700"></select>
               <span id="spreadsheet-autosave-status" class="text-[11px] text-slate-400 font-semibold"></span>
             </div>
           </div>
-          <p class="text-xs text-slate-500 mb-5">Semua sesi Tugas & Ujian yang sudah pernah diinput untuk kelas ini ditampilkan sebagai kolom — klik langsung pada sel untuk mengedit nilai siswa, tidak perlu mencari lewat Riwayat lagi. Perubahan tersimpan otomatis.</p>
+          <p class="text-xs text-slate-500 mb-5">Semua nilai Tugas & Ujian langsung diinput dan diedit di sini — klik sel mana pun untuk mengubah nilainya, tersimpan otomatis. Tidak perlu form terpisah lagi.</p>
+
+          <div class="flex flex-wrap items-end gap-2 mb-5 p-3.5 bg-slate-50 rounded-2xl border border-slate-200/70">
+            <div>
+              <label class="block text-[9px] uppercase font-bold text-slate-400 mb-1">Kategori</label>
+              <select id="spreadsheet-tambah-kategori" class="p-2 border rounded-lg text-xs font-semibold bg-white">
+                <option value="tugas" id="opt-bobot-tugas">📝 Tugas</option>
+                <option value="ujian" id="opt-bobot-ujian">🎯 Ujian</option>
+              </select>
+            </div>
+            <div class="flex-1 min-w-[160px]">
+              <label class="block text-[9px] uppercase font-bold text-slate-400 mb-1">Judul Penilaian Baru</label>
+              <input type="text" id="spreadsheet-tambah-judul" placeholder="Contoh: Tugas Bab 3 / UH 2" class="w-full p-2 border rounded-lg text-xs font-semibold bg-white focus:ring-2 focus:ring-[#1a73e8]/20 focus:outline-none">
+            </div>
+            <button onclick="tambahSesiNilaiBaru()" class="px-4 py-2 bg-[#1a73e8] hover:bg-[#1557b0] text-white text-xs font-bold rounded-lg shadow-sm transition shrink-0">➕ Tambah Kolom</button>
+          </div>
+
+          <p id="spreadsheet-nilai-scroll-hint" class="view-hidden text-[11px] text-slate-400 font-semibold mb-2">👉 Geser tabel ke kanan untuk melihat kolom penilaian lainnya</p>
           <div class="overflow-x-auto border border-slate-200/70 rounded-2xl">
             <table class="text-sm border-collapse w-full">
               <thead>
@@ -820,7 +791,7 @@
         <div class="relative z-10">
           <span class="text-[10px] font-extrabold uppercase tracking-widest bg-rose-800 text-rose-200 px-3 py-1 rounded-full border border-rose-700">System Administrator</span>
           <h2 class="text-2xl font-black mt-2 tracking-tight text-white">Panel Operator Sekolah & DB</h2>
-          <p class="text-xs text-rose-200 mt-1">Hak akses penuh untuk memodifikasi database pengguna (Firebase)</p>
+          <p class="text-xs text-rose-200 mt-1">Hak akses penuh untuk memodifikasi database pengguna (Supabase)</p>
         </div>
         <span class="text-3xl relative z-10 bg-rose-800/80 p-3 rounded-2xl border border-rose-700/60">🔐</span>
       </div>
@@ -1001,124 +972,110 @@
   </div>
 
   <!-- SCRIPT UTAMA & LOGIC (100% UTUH) -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
-// ======================================================================
-// KONFIGURASI BACKEND SUPABASE (Pengganti Firestore)
-// ======================================================================
+    // =========================================================
+    // KONFIGURASI BACKEND SUPABASE (dulu Firebase Firestore)
+    // =========================================================
+    const supabaseConfig = {
+      url: "https://wbnylogfeluzesnlrpxx.supabase.co",   // <-- ganti dengan Project URL Supabase Anda
+      anonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indibnlsb2dmZWx1emVzbmxycHh4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc0NjQ3MjYsImV4cCI6MjEwMzA0MDcyNn0.6GUEebsYyc-XWK8oYtGcpTHpf5fkT2wYD1lxe-h1bl4"   // <-- ganti dengan anon/public key Supabase Anda
+    };
 
-// Masukkan URL dan Key Supabase Anda (Dapatkan di Dashboard Supabase > Settings > API)
-const supabaseUrl = 'https://wbnylogfeluzesnlrpxx.supabase.co'; // GANTI DENGAN URL ANDA
-const supabaseKey = 'sb_publishable_tP90rm0YofD-6SIvPriwGw_5of4KiLG'; // GANTI DENGAN ANON KEY ANDA
+    const supabase = window.supabase.createClient(supabaseConfig.url, supabaseConfig.anonKey);
 
-const supabaseClient = supabase.createClient(supabaseUrl, supabaseKey);
-
-// Wrapper agar API-nya sama persis dengan sebelumnya (get/put/remove/allDocs/putBulk/removeBulk)
-// supaya semua kode di bawah baris 1076 tidak perlu diubah lagi.
-class FirestoreDB {
-    constructor(collectionName) {
-        // collectionName sekarang menjadi nama tabel di Supabase
-        // Karena di Supabase Anda menggunakan huruf kecil (users, siswa, dll), 
-        // kita ubah inputnya menjadi lowercase (opsional, untuk mencegah error case-sensitive)
-        this.tableName = collectionName.toLowerCase(); 
-    }
-
-    async get(id) {
-        const { data, error } = await supabaseClient
-            .from(this.tableName)
-            .select('*')
-            .eq('_id', String(id))
-            .single();
-
-        if (error) {
-            if (error.code === 'PGRST116') { 
-                const err = new Error('not_found');
-                err.name = 'not_found';
-                throw err;
-            }
-            throw error;
+    // Wrapper agar API-nya sama persis dengan sebelumnya (get/put/update/remove/allDocs/putBulk/removeBulk)
+    // supaya semua kode di bawah ini (ratusan pemanggilan dbSiswa/dbAbsen/dst) TIDAK perlu diubah lagi.
+    // Setiap "koleksi" jadi 1 tabel Supabase dengan kolom: id (text), data (jsonb).
+    class SupabaseDB {
+      constructor(tableName) {
+        this.table = tableName.toLowerCase();
+      }
+      async get(id) {
+        const { data, error } = await supabase
+          .from(this.table)
+          .select('id, data')
+          .eq('id', String(id))
+          .maybeSingle();
+        if (error) throw error;
+        if (!data) {
+          const err = new Error('not_found');
+          err.name = 'not_found';
+          throw err;
         }
-        
-        return data; 
-    }
-
-    async put(doc) {
-        const { data, error } = await supabaseClient
-            .from(this.tableName)
-            .upsert([doc]) 
-            .select()
-            .single();
-
+        return { _id: data.id, ...data.data };
+      }
+      async put(doc) {
+        const { _id, ...data } = doc;
+        const { error } = await supabase
+          .from(this.table)
+          .upsert({ id: String(_id), data }, { onConflict: 'id' });
         if (error) throw error;
-        return data || doc;
-    }
-
-    async update(id, partialData) {
-        const { error } = await supabaseClient
-            .from(this.tableName)
-            .update(partialData)
-            .eq('_id', String(id));
-
+        return doc;
+      }
+      async update(id, partialData) {
+        // Ambil dulu data lama, gabungkan (mirip .update() Firestore yg partial merge)
+        const existing = await this.get(id).catch(() => null);
+        const merged = { ...(existing || {}), ...partialData };
+        delete merged._id;
+        const { error } = await supabase
+          .from(this.table)
+          .upsert({ id: String(id), data: merged }, { onConflict: 'id' });
         if (error) throw error;
         return { ok: true };
-    }
-
-    async remove(doc) {
-        const { error } = await supabaseClient
-            .from(this.tableName)
-            .delete()
-            .eq('_id', String(doc._id));
-
+      }
+      async remove(doc) {
+        const { error } = await supabase.from(this.table).delete().eq('id', String(doc._id));
         if (error) throw error;
         return { ok: true };
-    }
-
-    async allDocs({ include_docs } = {}) {
-        const { data, error } = await supabaseClient
-            .from(this.tableName)
-            .select('*');
-
-        if (error) throw error;
-
-        return { 
-            rows: data.map(doc => ({ 
-                id: doc._id, 
-                doc: doc 
-            })) 
-        };
-    }
-
-    async putBulk(docsArray) {
+      }
+      async allDocs({ include_docs } = {}) {
+        // Supabase default membatasi 1000 baris per request, jadi kita paging supaya
+        // koleksi besar (mis. ribuan data absensi) tetap tersalin/terbaca semua.
+        let all = [];
+        let from = 0;
+        const PAGE = 1000;
+        while (true) {
+          const { data, error } = await supabase
+            .from(this.table)
+            .select('id, data')
+            .range(from, from + PAGE - 1);
+          if (error) throw error;
+          all = all.concat(data);
+          if (data.length < PAGE) break;
+          from += PAGE;
+        }
+        return { rows: all.map(d => ({ id: d.id, doc: { _id: d.id, ...d.data } })) };
+      }
+      async putBulk(docsArray) {
         if (!docsArray || docsArray.length === 0) return { ok: true, count: 0 };
-
-        const { error } = await supabaseClient
-            .from(this.tableName)
-            .upsert(docsArray);
-
-        if (error) throw error;
+        for (let i = 0; i < docsArray.length; i += 400) {
+          const chunk = docsArray.slice(i, i + 400).map(doc => {
+            const { _id, ...data } = doc;
+            return { id: String(_id), data };
+          });
+          const { error } = await supabase.from(this.table).upsert(chunk, { onConflict: 'id' });
+          if (error) throw error;
+        }
         return { ok: true, count: docsArray.length };
-    }
-
-    // Menambahkan fungsi removeBulk sesuai gambar di baris 1067
-    async removeBulk(idsArray) {
+      }
+      async removeBulk(idsArray) {
         if (!idsArray || idsArray.length === 0) return { ok: true };
-
-        const { error } = await supabaseClient
-            .from(this.tableName)
-            .delete()
-            .in('_id', idsArray.map(String)); // Menghapus banyak baris sekaligus berdasarkan array ID
-
-        if (error) throw error;
+        for (let i = 0; i < idsArray.length; i += 400) {
+          const chunk = idsArray.slice(i, i + 400).map(String);
+          const { error } = await supabase.from(this.table).delete().in('id', chunk);
+          if (error) throw error;
+        }
         return { ok: true };
+      }
     }
-}
-    const dbUsers = new FirestoreDB('Users');
-    const dbSiswa = new FirestoreDB('Siswa');
-    const dbAbsen = new FirestoreDB('absen_guru');
-    const dbNilai = new FirestoreDB('Nilai');
-    const dbJurnal = new FirestoreDB('jurnal_harian');
-    const dbMateri = new FirestoreDB('Materi');
-    const dbTugas = new FirestoreDB('Tugas');
+
+    const dbUsers = new SupabaseDB('Users');
+    const dbSiswa = new SupabaseDB('Siswa');
+    const dbAbsen = new SupabaseDB('Absen');
+    const dbNilai = new SupabaseDB('Nilai');
+    const dbJurnal = new SupabaseDB('Jurnal');
+    const dbMateri = new SupabaseDB('Materi');
+    const dbTugas = new SupabaseDB('Tugas');
 
     let currentUser = null;
     let selectedLoginRole = 'guru';
@@ -1572,6 +1529,7 @@ class FirestoreDB {
 
     function logout() {
       currentUser = null;
+      modeOperatorAktif = false;
       document.getElementById('user-profile-badge').classList.add('view-hidden');
       const views = ['view-guru', 'view-siswa', 'view-ortu', 'view-operator'];
       views.forEach(v => document.getElementById(v).classList.add('view-hidden'));
@@ -1579,8 +1537,45 @@ class FirestoreDB {
       document.getElementById('form-login').reset();
     }
 
+    async function refreshData() {
+      const btn = document.getElementById('btn-refresh-data');
+      const htmlAsli = btn.innerHTML;
+      btn.innerHTML = '<span>⏳</span>';
+      btn.disabled = true;
+
+      try {
+        if (modeOperatorAktif) {
+          renderTabelOperator();
+          updateSelectGuruOperator();
+          loadStatistikOperator();
+        } else if (currentUser && currentUser.role === 'guru') {
+          await loadBobotNilai();
+          await loadKkmPerTingkat();
+          updateLabelBobotDiHalaman();
+          switchGuruTab(guruTabAktif);
+          loadDaftarJurnal();
+          loadDaftarMateriGuru();
+        } else if (currentUser && currentUser.role === 'siswa') {
+          renderDashboardSiswa();
+        } else if (currentUser && currentUser.role === 'ortu') {
+          renderDashboardOrtu();
+        } else {
+          // Status tidak dikenali (jarang terjadi) — fallback aman ke reload penuh
+          location.reload();
+          return;
+        }
+      } catch (err) {
+        alert('❌ Gagal memuat ulang data. Periksa koneksi internet kamu.\n\nDetail: ' + err.message);
+      } finally {
+        btn.innerHTML = htmlAsli;
+        btn.disabled = false;
+      }
+    }
+
     // --- SUB-TAB NAVIGASI GURU ---
+    let guruTabAktif = 'siswa';
     function switchGuruTab(tabName) {
+      guruTabAktif = tabName;
       const tabs = ['siswa', 'absen', 'nilai', 'jurnal', 'aktif', 'bobot', 'materi', 'tugas', 'download', 'statistik'];
       tabs.forEach(t => {
         const btn = document.getElementById(`btn-tab-${t}`);
@@ -1595,7 +1590,7 @@ class FirestoreDB {
       });
       if (tabName === 'siswa') renderTabelGuru();
       if (tabName === 'absen' || tabName === 'nilai' || tabName === 'aktif') updateSelectKelasGuru();
-      if (tabName === 'absen') updateSelectKelasAbsenSpreadsheet();
+      if (tabName === 'absen') { updateSelectKelasAbsenSpreadsheet(); cekAbsenLama(); }
       if (tabName === 'nilai') updateSelectKelasSpreadsheet();
       if (tabName === 'aktif') loadRiwayatAktif();
       if (tabName === 'bobot') { isiFormBobot(); isiFormKkm(); updateTampilanFotoProfil(); }
@@ -2339,15 +2334,12 @@ class FirestoreDB {
       const kelasSet = new Set(allSiswa.rows.map(r => r.doc).filter(d => d.guru_id === currentUser._id).map(d => d.kelas));
       
       const selAbs = document.getElementById('absen-pilih-kelas');
-      const selNil = document.getElementById('nilai-pilih-kelas');
       const selAktif = document.getElementById('aktif-pilih-kelas');
       selAbs.innerHTML = '';
-      selNil.innerHTML = '';
       selAktif.innerHTML = '';
 
       kelasSet.forEach(k => {
         selAbs.innerHTML += `<option value="${k}">${k}</option>`;
-        selNil.innerHTML += `<option value="${k}">${k}</option>`;
         selAktif.innerHTML += `<option value="${k}">${k}</option>`;
       });
     }
@@ -2575,6 +2567,105 @@ class FirestoreDB {
     let spreadsheetSesiCacheAbsen = {};
     let spreadsheetAutosaveTimersAbsen = {};
 
+    async function cekAbsenLama() {
+      const allAbsen = await dbAbsen.allDocs({ include_docs: true });
+      const lama = allAbsen.rows.map(r => r.doc).filter(d => d.guru_id === currentUser._id && d._id.includes('_pert_'));
+      const banner = document.getElementById('banner-absen-lama');
+      if (lama.length > 0) {
+        document.getElementById('jumlah-absen-lama').innerText = lama.length;
+        banner.classList.remove('view-hidden');
+      } else {
+        banner.classList.add('view-hidden');
+      }
+    }
+
+    async function perbaikiDataAbsenLama() {
+      const konfirmasi = confirm('Ini akan menggabungkan data absensi format lama (yang masih pakai "Pertemuan Ke-") ke format baru. Data TIDAK akan hilang — kalau ada tanggal yang sama, datanya digabung. Lanjutkan?');
+      if (!konfirmasi) return;
+
+      const btn = document.getElementById('btn-perbaiki-absen-lama');
+      const teksAsli = btn.innerText;
+      btn.disabled = true;
+      btn.innerText = '⏳ Memperbaiki...';
+
+      try {
+        const allAbsen = await dbAbsen.allDocs({ include_docs: true });
+        const milikSaya = allAbsen.rows.map(r => r.doc).filter(d => d.guru_id === currentUser._id);
+
+        const lama = milikSaya.filter(d => d._id.includes('_pert_'));
+        if (lama.length === 0) {
+          alert('Tidak ada data absensi format lama yang perlu diperbaiki.');
+          document.getElementById('banner-absen-lama').classList.add('view-hidden');
+          return;
+        }
+
+        // Peta dokumen format BARU yang sudah ada (key: guruId_kelas_tanggal)
+        const baruMap = {};
+        milikSaya.filter(d => !d._id.includes('_pert_')).forEach(d => {
+          baruMap[`${d.guru_id}_${d.kelas}_${d.tanggal}`] = d;
+        });
+
+        const toPut = [];
+        const toRemoveIds = [];
+        let digabung = 0, dipindah = 0;
+
+        for (let d of lama) {
+          const key = `${d.guru_id}_${d.kelas}_${d.tanggal}`;
+          let target = baruMap[key];
+
+          if (target) {
+            // Sudah ada data format baru di tanggal yang sama — gabungkan (isi yang belum ada saja)
+            target.data = target.data || {};
+            for (let siswaId in d.data) {
+              if (target.data[siswaId] === undefined) target.data[siswaId] = d.data[siswaId];
+            }
+            toPut.push(target);
+            digabung++;
+          } else {
+            // Belum ada — pindahkan ke ID format baru
+            const docBaru = { ...d, _id: key };
+            delete docBaru.pertemuan;
+            toPut.push(docBaru);
+            baruMap[key] = docBaru; // supaya data lama berikutnya di tanggal sama ikut tergabung
+            dipindah++;
+          }
+          toRemoveIds.push(d._id);
+        }
+
+        await dbAbsen.putBulk(toPut);
+        await dbAbsen.removeBulk(toRemoveIds);
+
+        // Hitung ulang total H/S/I/D/A tiap siswa dari data Absen yang sudah bersih,
+        // supaya akumulasinya pasti akurat (menghapus kemungkinan dobel hitung sebelumnya).
+        btn.innerText = '⏳ Menghitung ulang rekap siswa...';
+        const allSiswa = await dbSiswa.allDocs({ include_docs: true });
+        const siswaSaya = allSiswa.rows.map(r => r.doc).filter(s => s.guru_id === currentUser._id);
+
+        const allAbsenBaru = await dbAbsen.allDocs({ include_docs: true });
+        const absenSaya = allAbsenBaru.rows.map(r => r.doc).filter(d => d.guru_id === currentUser._id);
+
+        siswaSaya.forEach(s => {
+          const totalBaru = { H: 0, S: 0, I: 0, D: 0, A: 0 };
+          absenSaya.filter(a => a.kelas === s.kelas).forEach(a => {
+            const st = a.data && a.data[s._id];
+            if (st && totalBaru[st] !== undefined) totalBaru[st]++;
+          });
+          s.absensi = totalBaru;
+          s.status = hitungStatusKKM(s.nilaiAkhir, s.absensi.A, s.kelas);
+        });
+        await dbSiswa.putBulk(siswaSaya);
+
+        alert(`✅ Selesai! ${dipindah} data dipindah ke format baru, ${digabung} data digabungkan dengan tanggal yang sudah ada. Rekap kehadiran semua siswa sudah dihitung ulang supaya akurat.`);
+        document.getElementById('banner-absen-lama').classList.add('view-hidden');
+        if (document.getElementById('spreadsheet-pilih-kelas-absen').value) loadSpreadsheetAbsen();
+        renderTabelGuru();
+      } catch (err) {
+        alert('❌ Gagal memperbaiki data. Detail: ' + err.message);
+        btn.disabled = false;
+        btn.innerText = teksAsli;
+      }
+    }
+
     async function updateSelectKelasAbsenSpreadsheet() {
       const allSiswa = await dbSiswa.allDocs({ include_docs: true });
       const kelasSet = [...new Set(allSiswa.rows.map(r => r.doc).filter(d => d.guru_id === currentUser._id).map(d => d.kelas))];
@@ -2624,9 +2715,19 @@ class FirestoreDB {
         return;
       }
       if (sesi.length === 0) {
-        thead.innerHTML = '<th class="p-3 text-left pl-4">Nama Siswa</th>';
-        tbody.innerHTML = siswaKelas.map(s => `<tr><td class="p-3 pl-4 font-bold text-slate-800">${s.nama}</td></tr>`).join('')
-          + `<tr><td class="p-4 text-center text-xs text-slate-400 font-semibold">Belum ada absensi untuk kelas ini — input dulu lewat form "Lembar Absensi Siswa" di atas.</td></tr>`;
+        thead.innerHTML = '<th class="p-3 text-left pl-4 sticky left-0 bg-slate-50 z-10 min-w-[150px] border-r border-slate-200">Nama Siswa</th><th class="p-2 text-center text-emerald-600">H</th><th class="p-2 text-center text-blue-600">S</th><th class="p-2 text-center text-amber-600">I</th><th class="p-2 text-center text-violet-600">D</th><th class="p-2 text-center text-rose-600">A</th>';
+        tbody.innerHTML = siswaKelas.map(s => {
+          const abs = s.absensi || { H: 0, S: 0, I: 0, D: 0, A: 0 };
+          return `<tr>
+            <td class="p-3 pl-4 font-bold text-slate-800">${s.nama}</td>
+            <td class="p-2 text-center font-extrabold text-emerald-600">${abs.H}</td>
+            <td class="p-2 text-center font-extrabold text-blue-600">${abs.S}</td>
+            <td class="p-2 text-center font-extrabold text-amber-600">${abs.I}</td>
+            <td class="p-2 text-center font-extrabold text-violet-600">${abs.D||0}</td>
+            <td class="p-2 text-center font-extrabold text-rose-600">${abs.A}</td>
+          </tr>`;
+        }).join('')
+          + `<tr><td colspan="6" class="p-4 text-center text-xs text-slate-400 font-semibold">Belum ada riwayat tanggal untuk kelas ini — input dulu lewat form "Lembar Absensi Siswa" di atas. Total di atas adalah akumulasi dari seluruh input sebelumnya (kalau ada).</td></tr>`;
         return;
       }
 
@@ -2639,6 +2740,12 @@ class FirestoreDB {
             <button onclick="hapusAbsenEntry('${s._id}', this)" title="Hapus tanggal ini" class="mt-1 text-[9px] text-rose-400 hover:text-rose-600 font-bold normal-case">🗑️ Hapus</button>
           </th>`;
       });
+      headHtml += `
+        <th class="p-2 text-center min-w-[45px] bg-emerald-50 border-l-2 border-slate-300">Total<br>H</th>
+        <th class="p-2 text-center min-w-[45px] bg-blue-50">Total<br>S</th>
+        <th class="p-2 text-center min-w-[45px] bg-amber-50">Total<br>I</th>
+        <th class="p-2 text-center min-w-[45px] bg-violet-50">Total<br>D</th>
+        <th class="p-2 text-center min-w-[45px] bg-rose-50">Total<br>A</th>`;
       thead.innerHTML = headHtml;
 
       const warnaStatus = { H: 'text-emerald-600', S: 'text-blue-600', I: 'text-amber-600', D: 'text-violet-600', A: 'text-rose-600' };
@@ -2654,6 +2761,13 @@ class FirestoreDB {
               </select>
             </td>`;
         });
+        const abs = s.absensi || { H: 0, S: 0, I: 0, D: 0, A: 0 };
+        row += `
+          <td class="p-2 text-center font-black text-emerald-600 bg-emerald-50/60 border-l-2 border-slate-200" id="total-abs-H-${s._id}">${abs.H}</td>
+          <td class="p-2 text-center font-black text-blue-600 bg-blue-50/60" id="total-abs-S-${s._id}">${abs.S}</td>
+          <td class="p-2 text-center font-black text-amber-600 bg-amber-50/60" id="total-abs-I-${s._id}">${abs.I}</td>
+          <td class="p-2 text-center font-black text-violet-600 bg-violet-50/60" id="total-abs-D-${s._id}">${abs.D||0}</td>
+          <td class="p-2 text-center font-black text-rose-600 bg-rose-50/60" id="total-abs-A-${s._id}">${abs.A}</td>`;
         row += `</tr>`;
         return row;
       }).join('');
@@ -2689,6 +2803,12 @@ class FirestoreDB {
         await dbAbsen.put(sesi);
         spreadsheetSesiCacheAbsen[sesiId] = sesi;
 
+        // Update kolom Total di DOM langsung, tanpa perlu muat ulang seluruh tabel
+        ['H', 'S', 'I', 'D', 'A'].forEach(st => {
+          const el = document.getElementById(`total-abs-${st}-${siswaId}`);
+          if (el) el.innerText = s.absensi[st] || 0;
+        });
+
         const jam = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
         if (statusEl) statusEl.innerText = `✅ Tersimpan otomatis pukul ${jam}`;
         renderTabelGuru();
@@ -2698,118 +2818,22 @@ class FirestoreDB {
     }
 
     // --- PORTAL GURU: BUKU NILAI ---
-    async function loadSiswaUntukNilai() {
-      const kelas = document.getElementById('nilai-pilih-kelas').value;
-      const kat = document.getElementById('nilai-kategori').value;
-      const jdl = document.getElementById('nilai-judul').value.trim();
+    // --- BUKU NILAI: TAMBAH KOLOM/SESI BARU LANGSUNG DARI SPREADSHEET ---
+    async function tambahSesiNilaiBaru() {
+      const kelas = document.getElementById('spreadsheet-pilih-kelas').value;
+      if (!kelas) { alert('Pilih kelas dulu di dropdown atas sebelum menambah kolom nilai.'); return; }
 
-      if (!jdl) { alert('Harap isi Judul Penilaian (misal: Tugas Bab 1)'); return; }
+      const kategori = document.getElementById('spreadsheet-tambah-kategori').value;
+      const judul = document.getElementById('spreadsheet-tambah-judul').value.trim();
+      if (!judul) { alert('Isi judul penilaian dulu (misal: Tugas Bab 3).'); return; }
 
-      // Setiap lembar baru langsung diberi docId TETAP (baik baru maupun mode edit override
-      // setelah ini) — supaya autosave berulang kali menimpa sesi yang SAMA, bukan bikin baru.
-      document.getElementById('nilai-edit-doc-id').value = `${currentUser._id}_${kelas}_${kat}_${Date.now()}`;
-      document.getElementById('btn-simpan-nilai').innerText = '💾 Simpan Sekarang';
-      document.getElementById('nilai-autosave-status').innerText = '💾 Nilai tersimpan otomatis setiap ada perubahan';
-
-      document.getElementById('nilai-list-container').classList.remove('view-hidden');
-      document.getElementById('nilai-label-info').innerText = `Input ${kat.toUpperCase()} : "${jdl}" (${kelas})`;
-
-      const all = await dbSiswa.allDocs({ include_docs: true });
-      const siswaKelas = all.rows.map(r => r.doc).filter(d => d.kelas === kelas && d.guru_id === currentUser._id);
-      siswaKelas.sort((a, b) => a.nama.localeCompare(b.nama));
-
-      nilaiTempState = {};
-      siswaNilaiCache = {};
-      const tbody = document.getElementById('tabel-nilai-body');
-      tbody.innerHTML = '';
-
-      siswaKelas.forEach((s, idx) => {
-        nilaiTempState[s._id] = 0;
-        siswaNilaiCache[s._id] = s;
-        tbody.innerHTML += `
-          <tr class="hover:bg-blue-50/40 transition">
-            <td class="p-3.5 text-center font-bold text-slate-500">${idx+1}</td>
-            <td class="p-3.5 font-bold text-slate-800">${s.nis}</td>
-            <td class="p-3.5 font-bold text-slate-800">${s.nama}</td>
-            <td class="p-3.5 text-center">
-              <input type="number" min="0" max="100" value="0" onchange="nilaiTempState['${s._id}'] = Number(this.value); triggerAutosaveNilai();" class="w-24 p-2 text-center border rounded-xl font-black bg-slate-50 focus:bg-white text-slate-800 focus:ring-2 focus:ring-[#1a73e8]/20 focus:outline-none">
-            </td>
-          </tr>
-        `;
-      });
-    }
-
-    let nilaiAutosaveTimer = null;
-    function triggerAutosaveNilai() {
-      const statusEl = document.getElementById('nilai-autosave-status');
-      if (statusEl) statusEl.innerText = '✏️ Ada perubahan, menyimpan sebentar lagi...';
-      clearTimeout(nilaiAutosaveTimer);
-      nilaiAutosaveTimer = setTimeout(() => simpanNilaiMassal(true), 1500);
-    }
-
-    function simpanNilaiManual() {
-      clearTimeout(nilaiAutosaveTimer);
-      simpanNilaiMassal(false);
-    }
-
-    async function simpanNilaiMassal(isAuto) {
-      const kelas = document.getElementById('nilai-pilih-kelas').value;
-      const kat = document.getElementById('nilai-kategori').value;
-      const jdl = document.getElementById('nilai-judul').value.trim();
-      const docId = document.getElementById('nilai-edit-doc-id').value;
-      const statusEl = document.getElementById('nilai-autosave-status');
-
-      const btn = document.getElementById('btn-simpan-nilai');
-      const teksAsli = btn.innerText;
-      if (!isAuto) btn.disabled = true;
-      if (statusEl) statusEl.innerText = '⏳ Menyimpan...';
-
+      const docId = `${currentUser._id}_${kelas}_${kategori}_${Date.now()}`;
       try {
-        if (!isAuto) btn.innerText = '⏳ Menyiapkan data nilai...';
-        const updatedDocs = [];
-        for (let id in nilaiTempState) {
-          const val = nilaiTempState[id];
-          const doc = siswaNilaiCache[id] || await dbSiswa.get(id);
-
-          // Nilai disimpan per-sesi (keyed by docId sesi ini), bukan di-push ke array,
-          // supaya kalau sesi ini diedit lagi nanti, nilainya DIGANTI bukan ditambah dobel.
-          if (kat === 'tugas') {
-            doc.nilai.riwayatTugasMassal = doc.nilai.riwayatTugasMassal || {};
-            doc.nilai.riwayatTugasMassal[docId] = val;
-            doc.nilai.rataTugas = hitungRataRata(gabungkanNilaiTugas(doc.nilai));
-          } else if (kat === 'ujian') {
-            doc.nilai.riwayatUjianMassal = doc.nilai.riwayatUjianMassal || {};
-            doc.nilai.riwayatUjianMassal[docId] = val;
-            doc.nilai.rataUjian = hitungRataRata(gabungkanNilaiUjian(doc.nilai));
-          }
-          doc.nilaiAkhir = hitungNilaiAkhir(doc.nilai.rataTugas, doc.nilai.aktif, doc.nilai.rataUjian, doc.absensi);
-          doc.status = hitungStatusKKM(doc.nilaiAkhir, doc.absensi.A, doc.kelas);
-          updatedDocs.push(doc);
-          siswaNilaiCache[id] = doc;
-        }
-
-        if (!isAuto) btn.innerText = '⏳ Mengirim ke server...';
-        await dbSiswa.putBulk(updatedDocs);
-        await dbNilai.put({ _id: docId, guru_id: currentUser._id, kelas: kelas, kategori: kat, judul: jdl, data: nilaiTempState });
-
-        const jam = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-        if (statusEl) statusEl.innerText = `✅ Tersimpan otomatis pukul ${jam}`;
-
-        if (!isAuto) {
-          alert('✅ Berhasil disimpan!');
-          document.getElementById('nilai-list-container').classList.add('view-hidden');
-          document.getElementById('nilai-judul').value = '';
-        }
-        renderTabelGuru();
-        if (document.getElementById('spreadsheet-pilih-kelas').value) loadSpreadsheetNilai();
+        await dbNilai.put({ _id: docId, guru_id: currentUser._id, kelas: kelas, kategori: kategori, judul: judul, data: {} });
+        document.getElementById('spreadsheet-tambah-judul').value = '';
+        await loadSpreadsheetNilai();
       } catch (err) {
-        if (statusEl) statusEl.innerText = '❌ Gagal menyimpan otomatis — periksa koneksi internet';
-        if (!isAuto) alert('❌ Gagal menyimpan nilai. Periksa koneksi internet kamu.\n\nDetail: ' + err.message);
-      } finally {
-        if (!isAuto) {
-          btn.disabled = false;
-          btn.innerText = teksAsli;
-        }
+        alert('❌ Gagal menambah kolom nilai. Detail: ' + err.message);
       }
     }
 
@@ -2881,10 +2905,12 @@ class FirestoreDB {
       const kelas = document.getElementById('spreadsheet-pilih-kelas').value;
       const thead = document.getElementById('spreadsheet-nilai-head');
       const tbody = document.getElementById('spreadsheet-nilai-body');
+      const scrollHint = document.getElementById('spreadsheet-nilai-scroll-hint');
 
       if (!kelas) {
         thead.innerHTML = '';
         tbody.innerHTML = '<tr><td class="p-6 text-center text-xs text-slate-400 font-semibold">Pilih kelas dulu di atas untuk menampilkan buku nilainya.</td></tr>';
+        if (scrollHint) scrollHint.classList.add('view-hidden');
         return;
       }
 
@@ -2897,6 +2923,12 @@ class FirestoreDB {
       const allNilai = await dbNilai.allDocs({ include_docs: true });
       const sesi = allNilai.rows.map(r => r.doc).filter(d => d.guru_id === currentUser._id && d.kelas === kelas && ['tugas', 'ujian'].includes(d.kategori));
       sesi.sort((a, b) => (Number(a._id.split('_').pop()) || 0) - (Number(b._id.split('_').pop()) || 0));
+
+      // Tampilkan petunjuk geser kalau kolomnya banyak (layar kemungkinan tidak muat semua)
+      if (scrollHint) {
+        if (sesi.length > 4) scrollHint.classList.remove('view-hidden');
+        else scrollHint.classList.add('view-hidden');
+      }
 
       spreadsheetSiswaCache = {};
       siswaKelas.forEach(s => { spreadsheetSiswaCache[s._id] = s; });
@@ -2911,7 +2943,7 @@ class FirestoreDB {
       if (sesi.length === 0) {
         thead.innerHTML = '<th class="p-3 text-left pl-4">Nama Siswa</th>';
         tbody.innerHTML = siswaKelas.map(s => `<tr><td class="p-3 pl-4 font-bold text-slate-800">${s.nama}</td></tr>`).join('')
-          + `<tr><td class="p-4 text-center text-xs text-slate-400 font-semibold">Belum ada sesi Tugas/Ujian untuk kelas ini — buat dulu lewat form "Input Nilai Penilaian" di atas.</td></tr>`;
+          + `<tr><td class="p-4 text-center text-xs text-slate-400 font-semibold">Belum ada nilai Tugas/Ujian untuk kelas ini — tambahkan kolom pertama lewat form "➕ Tambah Kolom" di atas.</td></tr>`;
         return;
       }
 
@@ -3218,16 +3250,16 @@ class FirestoreDB {
 
       // Kelompokkan per kelas, lalu urutkan tanggal kronologis di dalam tiap kelas
       // supaya progres mengajarnya kelihatan urut (bukan tercampur antar kelas).
-      const perKelasJurnal = {};
+      const perKelas = {};
       docs.forEach(d => {
-        perKelasJurnal[d.kelas] = perKelasJurnal[d.kelas] || [];
-        perKelasJurnal[d.kelas].push(d);
+        perKelas[d.kelas] = perKelas[d.kelas] || [];
+        perKelas[d.kelas].push(d);
       });
 
-      const daftarKelasJurnal = Object.keys(perKelasJurnal).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+      const daftarKelas = Object.keys(perKelas).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
 
-      daftarKelasJurnal.forEach(kelas => {
-        const entriKelas = perKelasJurnal[kelas].sort((a, b) => new Date(a.tanggal) - new Date(b.tanggal));
+      daftarKelas.forEach(kelas => {
+        const entriKelas = perKelas[kelas].sort((a, b) => new Date(a.tanggal) - new Date(b.tanggal));
 
         cont.innerHTML += `
           <div class="flex items-center gap-2 mt-2 mb-1 first:mt-0">
@@ -4069,7 +4101,7 @@ class FirestoreDB {
       const oldUrl = document.getElementById('migrasi-url-lama').value.trim();
       if (!oldUrl) { alert('Isi dulu URL Web App Apps Script lama kamu.'); return; }
 
-      const konfirmasi = confirm('Ini akan menyalin SEMUA data dari sistem lama (Google Sheets) ke Firebase. Proses aman dijalankan berkali-kali. Lanjutkan?');
+      const konfirmasi = confirm('Ini akan menyalin SEMUA data dari sistem lama (Google Sheets) ke database. Proses aman dijalankan berkali-kali. Lanjutkan?');
       if (!konfirmasi) return;
 
       const btn = document.getElementById('btn-migrasi');
@@ -4116,6 +4148,7 @@ class FirestoreDB {
       renderTabelOperator();
     }
     let rahasiaKlik = 0;
+    let modeOperatorAktif = false;
     document.getElementById('secret-footer').addEventListener('click', () => {
       rahasiaKlik++;
       if (rahasiaKlik >= 5) {
@@ -4123,6 +4156,7 @@ class FirestoreDB {
         const pass = prompt("Masukkan Kode Rahasia System Operator SMAN 15:");
         if (pass === "admin15") {
           alert("Akses Operator Terbuka! Selamat datang di Panel DB.");
+          modeOperatorAktif = true;
           document.getElementById('user-profile-badge').classList.remove('view-hidden');
           document.getElementById('badge-role').innerText = "OPERATOR";
           document.getElementById('badge-name').innerText = "Super Admin DB";
