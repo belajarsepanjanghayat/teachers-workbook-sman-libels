@@ -306,9 +306,32 @@
           </button>
         </div>
 
+        <!-- TAMPILAN SPREADSHEET ABSENSI PER KELAS (dipindah ke atas, jadi langsung terlihat tanpa scroll) -->
+        <div class="bg-white p-6 md:p-8 rounded-3xl shadow-[0_2px_12px_rgba(0,0,0,0.03)] border border-slate-200/60">
+          <div class="flex flex-wrap justify-between items-center gap-3 mb-2">
+            <h3 class="font-extrabold text-lg text-slate-800 flex items-center gap-2">
+              <span>🗂️</span> Riwayat Kehadiran per Kelas (Tampilan Spreadsheet)
+            </h3>
+            <div class="flex items-center gap-2">
+              <select id="spreadsheet-pilih-kelas-absen" onchange="loadSpreadsheetAbsen()" class="p-2 border rounded-xl bg-white text-xs font-semibold text-slate-700"></select>
+              <span id="spreadsheet-autosave-status-absen" class="text-[11px] text-slate-400 font-semibold"></span>
+            </div>
+          </div>
+          <p class="text-xs text-slate-500 mb-5">Semua tanggal yang sudah pernah diinput untuk kelas ini ditampilkan sebagai kolom — klik langsung pada sel untuk mengubah status kehadiran siswa, tidak perlu mencari lagi. Perubahan tersimpan otomatis.</p>
+          <div class="overflow-x-auto border border-slate-200/70 rounded-2xl">
+            <table class="text-sm border-collapse w-full">
+              <thead>
+                <tr id="spreadsheet-absen-head" class="bg-slate-50 text-[10px] uppercase text-slate-400 font-extrabold border-b border-slate-200/80"></tr>
+              </thead>
+              <tbody id="spreadsheet-absen-body" class="divide-y divide-slate-100"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- FORM UNTUK MEMBUKA/MEMBUAT LEMBAR ABSENSI TANGGAL BARU (tetap ada, dipakai untuk menambah kolom tanggal baru ke spreadsheet di atas) -->
         <div class="bg-white p-6 md:p-8 rounded-3xl shadow-[0_2px_12px_rgba(0,0,0,0.03)] border border-slate-200/60">
           <h3 class="font-extrabold text-lg text-slate-800 mb-6 flex items-center gap-2">
-            <span>📅</span> Lembar Absensi Siswa
+            <span>📅</span> Lembar Absensi Siswa (Buka/Tambah Tanggal Baru)
           </h3>
           
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50/80 p-5 rounded-2xl border border-slate-200/60 mb-8 text-xs font-bold text-slate-600">
@@ -350,28 +373,6 @@
                 <tbody id="tabel-absen-body" class="divide-y divide-slate-100"></tbody>
               </table>
             </div>
-          </div>
-        </div>
-
-        <!-- TAMPILAN SPREADSHEET ABSENSI PER KELAS -->
-        <div class="bg-white p-6 md:p-8 rounded-3xl shadow-[0_2px_12px_rgba(0,0,0,0.03)] border border-slate-200/60">
-          <div class="flex flex-wrap justify-between items-center gap-3 mb-2">
-            <h3 class="font-extrabold text-lg text-slate-800 flex items-center gap-2">
-              <span>🗂️</span> Riwayat Kehadiran per Kelas (Tampilan Spreadsheet)
-            </h3>
-            <div class="flex items-center gap-2">
-              <select id="spreadsheet-pilih-kelas-absen" onchange="loadSpreadsheetAbsen()" class="p-2 border rounded-xl bg-white text-xs font-semibold text-slate-700"></select>
-              <span id="spreadsheet-autosave-status-absen" class="text-[11px] text-slate-400 font-semibold"></span>
-            </div>
-          </div>
-          <p class="text-xs text-slate-500 mb-5">Semua tanggal yang sudah pernah diinput untuk kelas ini ditampilkan sebagai kolom — klik langsung pada sel untuk mengubah status kehadiran siswa, tidak perlu mencari lagi. Perubahan tersimpan otomatis.</p>
-          <div class="overflow-x-auto border border-slate-200/70 rounded-2xl">
-            <table class="text-sm border-collapse w-full">
-              <thead>
-                <tr id="spreadsheet-absen-head" class="bg-slate-50 text-[10px] uppercase text-slate-400 font-extrabold border-b border-slate-200/80"></tr>
-              </thead>
-              <tbody id="spreadsheet-absen-body" class="divide-y divide-slate-100"></tbody>
-            </table>
           </div>
         </div>
       </div>
@@ -2186,8 +2187,8 @@
     }
 
     // Membuka/mengunduh file tugas siswa. Mendukung 2 format:
-    // - sub.fileUrl (submission lama sebelum pindah ke Firebase, link Google Drive)
-    // - sub.fileData (submission baru, base64 disimpan langsung di Firestore)
+    // - sub.fileUrl: link ke file (Supabase Storage untuk upload baru, atau Google Drive untuk data lama)
+    // - sub.fileData: base64 tersimpan langsung di database (peninggalan sebelum pindah ke Supabase Storage — tetap didukung supaya submission lama tidak hilang)
     function bukaFileTugas(subId) {
       const sub = tugasFileCache[subId];
       if (!sub) { alert('Data file tidak ditemukan, coba muat ulang halaman.'); return; }
@@ -3790,11 +3791,11 @@
       const file = fileInput.files[0];
       if (!file) { alert('Pilih file terlebih dahulu.'); return; }
 
-      // File disimpan langsung di database (Firestore), bukan di cloud storage terpisah,
-      // jadi ukurannya dibatasi jauh lebih kecil (limit dokumen Firestore adalah 1MB).
-      const MAX_SIZE = 700 * 1024; // 700KB
+      // File disimpan di Supabase Storage (bukan langsung di database), jadi
+      // batas ukurannya jauh lebih longgar dibanding waktu masih base64-di-Firestore.
+      const MAX_SIZE = 20 * 1024 * 1024; // 20MB
       if (file.size > MAX_SIZE) {
-        alert('Ukuran file maksimal 700KB (file disimpan langsung di database). Ukuran file kamu: ' + (file.size / 1024).toFixed(0) + 'KB.\n\nCoba kompres dulu (misal foto tugas difoto dengan resolusi lebih rendah, atau simpan dokumen sebagai PDF ringan).');
+        alert('Ukuran file maksimal 20MB. Ukuran file kamu: ' + (file.size / 1024 / 1024).toFixed(1) + 'MB.');
         return;
       }
 
@@ -3803,14 +3804,22 @@
       btnEl.innerText = '⏳ Mengupload...';
 
       try {
-        const base64 = await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result.split(',')[1]);
-          reader.onerror = reject;
-          reader.readAsDataURL(file);
-        });
-
         const docId = `${materiId}_${currentUser._id}`;
+
+        // Nama file unik di Storage supaya tidak bentrok, tapi tetap bisa ditimpa
+        // (upsert) kalau siswa upload ulang untuk tugas yang sama.
+        const ext = file.name.includes('.') ? '.' + file.name.split('.').pop() : '';
+        const storagePath = `tugas/${docId}${ext}`;
+
+        const { error: uploadError } = await supabaseClient.storage
+          .from('tugas-siswa')
+          .upload(storagePath, file, { upsert: true, contentType: file.type || 'application/octet-stream' });
+        if (uploadError) throw uploadError;
+
+        const { data: publicUrlData } = supabaseClient.storage
+          .from('tugas-siswa')
+          .getPublicUrl(storagePath);
+
         let catatanLama = '';
         try {
           const existing = await dbTugas.get(docId);
@@ -3826,7 +3835,7 @@
           namaSiswa: currentUser.name,
           fileName: file.name,
           mimeType: file.type,
-          fileData: base64,
+          fileUrl: publicUrlData.publicUrl,
           waktuUpload: new Date().toISOString(),
           status: 'Belum Dinilai',
           nilai: null,
