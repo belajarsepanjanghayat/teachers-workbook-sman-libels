@@ -2876,8 +2876,9 @@
       tbody.innerHTML = siswaKelas.map(s => {
         let row = `<tr class="hover:bg-blue-50/40 transition"><td class="p-2.5 pl-4 font-bold text-slate-800 sticky left-0 bg-white z-10 border-r border-slate-100">${s.nama}</td>`;
         sesi.forEach(sesiItem => {
-          const val = (sesiItem.data && sesiItem.data[s._id] !== undefined) ? sesiItem.data[s._id] : '';
-          row += `<td class="p-1.5 text-center"><input type="number" min="0" max="100" value="${val}" onchange="editSelSpreadsheet('${sesiItem._id}', '${s._id}', this.value)" class="w-16 p-1.5 text-center border rounded-lg text-xs font-bold bg-slate-50 focus:bg-white text-slate-800 focus:ring-2 focus:ring-[#1a73e8]/20 focus:outline-none"></td>`;
+          const belum = !!(sesiItem.belum && sesiItem.belum[s._id]);
+const val = belum ? 0 : ((sesiItem.data && sesiItem.data[s._id] !== undefined) ? sesiItem.data[s._id] : '');
+row += `<td class="p-1.5 text-center"><div class="flex flex-col items-center gap-1"><input type="number" min="0" max="100" value="${val}" ${belum ? 'disabled' : ''} onchange="editSelSpreadsheet('${sesiItem._id}', '${s._id}', this.value)" class="w-16 p-1.5 text-center border rounded-lg text-xs font-bold focus:bg-white focus:ring-2 focus:ring-[#1a73e8]/20 focus:outline-none ${belum ? 'bg-rose-50 border-rose-300 text-rose-600' : 'bg-slate-50 text-slate-800'}"><label class="flex items-center gap-1 text-[9px] font-bold text-rose-500 cursor-pointer"><input type="checkbox" ${belum ? 'checked' : ''} class="w-3 h-3 accent-rose-600" onchange="toggleBelumDikerjakan('${sesiItem._id}', '${s._id}', this.checked, this)"> Belum</label></div></td>`;
         });
         row += `</tr>`;
         return row;
@@ -2895,39 +2896,63 @@
 
       const key = sesiId + '_' + siswaId;
       clearTimeout(spreadsheetAutosaveTimers[key]);
-      spreadsheetAutosaveTimers[key] = setTimeout(() => simpanSelSpreadsheet(sesiId, siswaId, val), 1000);
+      spreadsheetAutosaveTimers[key] = setTimeout(() => simpanSelSpreadsheet(sesiId, siswaId, val, false), 1000);
     }
 
-    async function simpanSelSpreadsheet(sesiId, siswaId, val) {
-      const statusEl = document.getElementById('spreadsheet-autosave-status');
-      try {
-        const sesi = spreadsheetSesiCache[sesiId] || await dbNilai.get(sesiId);
-        sesi.data = sesi.data || {};
-        sesi.data[siswaId] = val;
-        await dbNilai.put(sesi);
-        spreadsheetSesiCache[sesiId] = sesi;
+    function toggleBelumDikerjakan(sesiId, siswaId, checked, cbEl) {
+  const input = cbEl.closest('td').querySelector('input[type="number"]');
+  const merah = ['bg-rose-50', 'border-rose-300', 'text-rose-600'];
+  const normal = ['bg-slate-50', 'text-slate-800'];
+  if (checked) {
+    input.value = 0; input.disabled = true;
+    input.classList.remove(...normal); input.classList.add(...merah);
+  } else {
+    input.value = ''; input.disabled = false;
+    input.classList.remove(...merah); input.classList.add(...normal);
+  }
+  const statusEl = document.getElementById('spreadsheet-autosave-status');
+  if (statusEl) statusEl.innerText = '✏️ Menyimpan sebentar lagi...';
+  const key = sesiId + '_' + siswaId;
+  clearTimeout(spreadsheetAutosaveTimers[key]);
+  spreadsheetAutosaveTimers[key] = setTimeout(() => simpanSelSpreadsheet(sesiId, siswaId, checked ? 0 : null, checked), 500);
+}
 
-        const s = spreadsheetSiswaCache[siswaId] || await dbSiswa.get(siswaId);
-        if (sesi.kategori === 'tugas') {
-          s.nilai.riwayatTugasMassal = s.nilai.riwayatTugasMassal || {};
-          s.nilai.riwayatTugasMassal[sesiId] = val;
-          s.nilai.rataTugas = hitungRataRata(gabungkanNilaiTugas(s.nilai));
-        } else if (sesi.kategori === 'ujian') {
-          s.nilai.riwayatUjianMassal = s.nilai.riwayatUjianMassal || {};
-          s.nilai.riwayatUjianMassal[sesiId] = val;
-          s.nilai.rataUjian = hitungRataRata(gabungkanNilaiUjian(s.nilai));
-        }
-        s.nilaiAkhir = hitungNilaiAkhir(s.nilai.rataTugas, s.nilai.aktif, s.nilai.rataUjian, s.absensi);
-        s.status = hitungStatusKKM(s.nilaiAkhir, s.absensi.A, s.kelas);
-        await dbSiswa.put(s);
-        spreadsheetSiswaCache[siswaId] = s;
-
-        const jam = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-        if (statusEl) statusEl.innerText = `✅ Tersimpan otomatis pukul ${jam}`;
-      } catch (err) {
-        if (statusEl) statusEl.innerText = '❌ Gagal menyimpan — periksa koneksi internet';
-      }
+async function simpanSelSpreadsheet(sesiId, siswaId, val, belum) {
+  const statusEl = document.getElementById('spreadsheet-autosave-status');
+  try {
+    const sesi = spreadsheetSesiCache[sesiId] || await dbNilai.get(sesiId);
+    sesi.data = sesi.data || {};
+    sesi.belum = sesi.belum || {};
+    if (val === null) {
+      delete sesi.data[siswaId];
+      delete sesi.belum[siswaId];
+    } else {
+      sesi.data[siswaId] = val;
+      if (belum) sesi.belum[siswaId] = true; else delete sesi.belum[siswaId];
     }
+    await dbNilai.put(sesi);
+    spreadsheetSesiCache[sesiId] = sesi;
+
+    const s = spreadsheetSiswaCache[siswaId] || await dbSiswa.get(siswaId);
+    const mapKey = sesi.kategori === 'tugas' ? 'riwayatTugasMassal' : 'riwayatUjianMassal';
+    s.nilai[mapKey] = s.nilai[mapKey] || {};
+    if (val === null) delete s.nilai[mapKey][sesiId];
+    else s.nilai[mapKey][sesiId] = val;
+
+    if (sesi.kategori === 'tugas') s.nilai.rataTugas = hitungRataRata(gabungkanNilaiTugas(s.nilai));
+    else s.nilai.rataUjian = hitungRataRata(gabungkanNilaiUjian(s.nilai));
+
+    s.nilaiAkhir = hitungNilaiAkhir(s.nilai.rataTugas, s.nilai.aktif, s.nilai.rataUjian, s.absensi);
+    s.status = hitungStatusKKM(s.nilaiAkhir, s.absensi.A, s.kelas);
+    await dbSiswa.put(s);
+    spreadsheetSiswaCache[siswaId] = s;
+
+    const jam = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+    if (statusEl) statusEl.innerText = `✅ Tersimpan otomatis pukul ${jam}`;
+  } catch (err) {
+    if (statusEl) statusEl.innerText = '❌ Gagal menyimpan — periksa koneksi internet';
+  }
+}
 
     async function loadSiswaUntukAktif() {
       const kelas = document.getElementById('aktif-pilih-kelas').value;
@@ -3521,8 +3546,8 @@
         .filter(d => d.guru_id === guruId && d.data && d.data[siswaDocId] !== undefined && ['tugas', 'ujian', 'aktif'].includes(d.kategori))
         .forEach(d => {
           const jenisLabel = d.kategori === 'tugas' ? 'Tugas' : (d.kategori === 'ujian' ? 'Ujian' : 'Keaktifan');
-          items.push({ judul: d.judul, jenis: jenisLabel, status: 'selesai', ts: Number(d._id.split('_').pop()) || 0 });
-        });
+          const belum = !!(d.belum && d.belum[siswaDocId]);
+items.push({ judul: d.judul, jenis: jenisLabel, status: belum ? 'belum_dikerjakan' : 'selesai', ts: Number(d._id.split('_').pop()) || 0 });
 
       const materiTugas = materiDocs.filter(m => {
         if (m.guru_id !== guruId || !m.perluDikumpulkan) return false;
@@ -3537,7 +3562,8 @@
         items.push({ judul: m.judul, jenis: 'Tugas Upload', status: sub ? 'sudah_kumpul' : 'belum_kumpul', ts });
       });
 
-      items.sort((a, b) => b.ts - a.ts);
+      const prioritas = st => (st === 'belum_kumpul' || st === 'belum_dikerjakan') ? 0 : 1;
+items.sort((a, b) => prioritas(a.status) - prioritas(b.status) || b.ts - a.ts);
       return items;
     }
 
@@ -3547,7 +3573,9 @@
       }
       return items.map(it => {
         let badge;
-        if (it.status === 'belum_kumpul') {
+        if (it.status === 'belum_dikerjakan') {
+  badge = `<span class="text-[10px] font-extrabold bg-rose-50 text-rose-600 px-2.5 py-1 rounded-full border border-rose-200 shrink-0">❌ Belum Dikerjakan (Nilai 0)</span>`;
+} else if (it.status === 'belum_kumpul') {
           badge = `<span class="text-[10px] font-extrabold bg-rose-50 text-rose-600 px-2.5 py-1 rounded-full border border-rose-200 shrink-0">❌ Belum Dikumpulkan</span>`;
         } else if (it.status === 'sudah_kumpul') {
           badge = `<span class="text-[10px] font-extrabold bg-emerald-50 text-emerald-600 px-2.5 py-1 rounded-full border border-emerald-200 shrink-0">✅ Sudah Dikumpulkan</span>`;
