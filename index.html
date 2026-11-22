@@ -3549,6 +3549,7 @@ async function simpanSelSpreadsheet(sesiId, siswaId, val, belum) {
           const belum = !!(d.belum && d.belum[siswaDocId]);
 items.push({ judul: d.judul, jenis: jenisLabel, status: belum ? 'belum_dikerjakan' : 'selesai', ts: Number(d._id.split('_').pop()) || 0 });
         });
+      
       const materiTugas = materiDocs.filter(m => {
         if (m.guru_id !== guruId || !m.perluDikumpulkan) return false;
         const kt = m.kelasTarget || ['SEMUA'];
