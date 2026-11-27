@@ -3317,9 +3317,10 @@ async function simpanSelSpreadsheet(sesiId, siswaId, val, belum) {
       cont.innerHTML = '';
 
       if (materiTugas.length === 0) {
-        cont.innerHTML = '<p class="text-xs text-slate-400 font-semibold py-4">Belum ada tugas yang perlu dikumpulkan. Centang "📥 Ini tugas" saat menerbitkan materi baru di tab Materi & GDrive.</p>';
-        return;
-      }
+  cont.innerHTML = '<p class="text-xs text-slate-400 font-semibold py-4">Belum ada tugas yang perlu dikumpulkan. Centang "📥 Ini tugas" saat menerbitkan materi baru di tab Materi & GDrive.</p>';
+  await renderUploadDariBukuNilai(cont);
+  return;
+}
 
       const allSiswa = await dbSiswa.allDocs({ include_docs: true });
       const siswaGuru = allSiswa.rows.map(r => r.doc).filter(d => d.guru_id === currentUser._id);
@@ -3378,8 +3379,56 @@ async function simpanSelSpreadsheet(sesiId, siswaId, val, belum) {
           </div>
         `;
       });
+      await renderUploadDariBukuNilai(cont);
     }
+async function renderUploadDariBukuNilai(cont) {
+  const allNilai = await dbNilai.allDocs({ include_docs: true });
+  const sesiMap = {};
+  allNilai.rows.map(r => r.doc)
+    .filter(d => d.guru_id === currentUser._id && d.kategori)
+    .forEach(d => { sesiMap[d._id] = d; });
 
+  const allTugas = await dbTugas.allDocs({ include_docs: true });
+  const subs = allTugas.rows.map(r => r.doc).filter(t => t.guru_id === currentUser._id && sesiMap[t.materiId]);
+  subs.forEach(s => { tugasFileCache[s._id] = s; });
+  if (subs.length === 0) return;
+
+  const perSesi = {};
+  subs.forEach(s => { (perSesi[s.materiId] = perSesi[s.materiId] || []).push(s); });
+
+  cont.innerHTML += `<h4 class="font-extrabold text-xs text-slate-500 uppercase tracking-wider pt-2">Upload dari Kolom Buku Nilai</h4>`;
+  Object.keys(perSesi).forEach(sesiId => {
+    const sesi = sesiMap[sesiId];
+    const rows = perSesi[sesiId].sort((a, b) => (a.namaSiswa || '').localeCompare(b.namaSiswa || '')).map(s => `
+      <div class="flex items-center justify-between gap-2 p-3 rounded-xl bg-white border border-slate-100">
+        <div class="min-w-0">
+          <p class="font-bold text-xs text-slate-800 truncate">${s.namaSiswa || s.nis}</p>
+          <button onclick="bukaFileTugas('${s._id}')" class="text-[11px] text-[#1a73e8] hover:underline font-semibold truncate block text-left">📎 ${s.fileName || 'Lihat file'}</button>
+        </div>
+      </div>`).join('');
+
+    cont.innerHTML += `
+      <div class="border border-amber-200 bg-amber-50/40 rounded-2xl p-4">
+        <div class="flex justify-between items-center mb-3 gap-3">
+          <div>
+            <h4 class="font-extrabold text-sm text-slate-800">${sesi.judul}</h4>
+            <p class="text-[10px] text-indigo-500 font-bold mt-0.5">🏫 ${sesi.kelas} • ${sesi.kategori}</p>
+          </div>
+          <button onclick="keBukuNilai('${sesi.kelas}')" class="shrink-0 px-3 py-1.5 bg-[#1a73e8] hover:bg-[#1557b0] text-white text-[10px] font-bold rounded-lg transition">📊 Isi Nilai di Buku Nilai</button>
+        </div>
+        <div class="space-y-2">${rows}</div>
+      </div>`;
+  });
+}
+
+function keBukuNilai(kelas) {
+  switchGuruTab('nilai');
+  setTimeout(() => {
+    const sel = document.getElementById('spreadsheet-pilih-kelas');
+    sel.value = kelas;
+    loadSpreadsheetNilai();
+  }, 600);
+}
     async function simpanNilaiTugasUpload(subDocId, siswaDocId, materiId, btnEl) {
       const inputEl = document.getElementById(`nilai-tugas-${subDocId}`);
       const val = Number(inputEl.value);
@@ -3543,12 +3592,21 @@ async function simpanSelSpreadsheet(sesiId, siswaId, val, belum) {
       const items = [];
 
       nilaiDocs
-        .filter(d => d.guru_id === guruId && d.data && d.data[siswaDocId] !== undefined && ['tugas', 'ujian', 'aktif'].includes(d.kategori))
-        .forEach(d => {
-          const jenisLabel = d.kategori === 'tugas' ? 'Tugas' : (d.kategori === 'ujian' ? 'Ujian' : 'Keaktifan');
-          const belum = !!(d.belum && d.belum[siswaDocId]);
-items.push({ judul: d.judul, jenis: jenisLabel, status: belum ? 'belum_dikerjakan' : 'selesai', ts: Number(d._id.split('_').pop()) || 0 });
-        });
+  .filter(d => d.guru_id === guruId && d.data && d.data[siswaDocId] !== undefined && ['tugas', 'ujian', 'aktif'].includes(d.kategori))
+  .forEach(d => {
+    const jenisLabel = d.kategori === 'tugas' ? 'Tugas' : (d.kategori === 'ujian' ? 'Ujian' : 'Keaktifan');
+    const belum = !!(d.belum && d.belum[siswaDocId]);
+    items.push({
+      judul: d.judul,
+      jenis: jenisLabel,
+      status: belum ? 'belum_dikerjakan' : 'selesai',
+      ts: Number(d._id.split('_').pop()) || 0,
+      materiId: belum ? d._id : null,
+      guruId: guruId,
+      mapel: mapelDoc.mapel || '',
+      sub: belum ? (submissionMap[d._id] || null) : null
+    });
+  });
       
       const materiTugas = materiDocs.filter(m => {
         if (m.guru_id !== guruId || !m.perluDikumpulkan) return false;
@@ -3557,43 +3615,68 @@ items.push({ judul: d.judul, jenis: jenisLabel, status: belum ? 'belum_dikerjaka
       });
 
       materiTugas.forEach(m => {
-        const sub = submissionMap[m._id];
-        const tsMatch = m._id.match(/\d+/g);
-        const ts = tsMatch ? Number(tsMatch[tsMatch.length - 1]) : 0;
-        items.push({ judul: m.judul, jenis: 'Tugas Upload', status: sub ? 'sudah_kumpul' : 'belum_kumpul', ts });
-      });
+  const sub = submissionMap[m._id];
+  const tsMatch = m._id.match(/\d+/g);
+  const ts = tsMatch ? Number(tsMatch[tsMatch.length - 1]) : 0;
+  items.push({
+    judul: m.judul, jenis: 'Tugas Upload',
+    status: sub ? 'sudah_kumpul' : 'belum_kumpul', ts,
+    materiId: m._id, guruId: m.guru_id, mapel: m.mapel || '',
+    terlambat: new Date().getTime() > new Date(m.tutup).getTime(),
+    sub: sub || null
+  });
+});
 
       const prioritas = st => (st === 'belum_kumpul' || st === 'belum_dikerjakan') ? 0 : 1;
 items.sort((a, b) => prioritas(a.status) - prioritas(b.status) || b.ts - a.ts);
       return items;
     }
 
-    function renderChecklistHtml(items) {
-      if (items.length === 0) {
-        return '<p class="text-[11px] text-slate-400 font-semibold py-2">Belum ada tugas/ujian untuk mapel ini.</p>';
-      }
-      return items.map(it => {
-        let badge;
-        if (it.status === 'belum_dikerjakan') {
-  badge = `<span class="text-[10px] font-extrabold bg-rose-50 text-rose-600 px-2.5 py-1 rounded-full border border-rose-200 shrink-0">❌ Belum Dikerjakan (Nilai 0)</span>`;
-} else if (it.status === 'belum_kumpul') {
-          badge = `<span class="text-[10px] font-extrabold bg-rose-50 text-rose-600 px-2.5 py-1 rounded-full border border-rose-200 shrink-0">❌ Belum Dikumpulkan</span>`;
-        } else if (it.status === 'sudah_kumpul') {
-          badge = `<span class="text-[10px] font-extrabold bg-emerald-50 text-emerald-600 px-2.5 py-1 rounded-full border border-emerald-200 shrink-0">✅ Sudah Dikumpulkan</span>`;
-        } else {
-          badge = `<span class="text-[10px] font-extrabold bg-emerald-50 text-emerald-600 px-2.5 py-1 rounded-full border border-emerald-200 shrink-0">✅ Sudah Dikerjakan</span>`;
-        }
-        return `
-          <div class="flex items-center justify-between gap-3 py-1.5 bg-white/60 px-3 rounded-xl">
-            <div class="min-w-0">
-              <p class="text-xs font-bold text-slate-700 truncate">${it.judul}</p>
-              <p class="text-[10px] text-slate-400 font-semibold">${it.jenis}</p>
-            </div>
-            ${badge}
-          </div>
-        `;
-      }).join('');
+    function renderChecklistHtml(items, bisaUpload) {
+  if (items.length === 0) {
+    return '<p class="text-[11px] text-slate-400 font-semibold py-2">Belum ada tugas/ujian untuk mapel ini.</p>';
+  }
+  return items.map(it => {
+    let badge;
+    if (it.status === 'belum_dikerjakan') {
+      badge = `<span class="text-[10px] font-extrabold bg-rose-50 text-rose-600 px-2.5 py-1 rounded-full border border-rose-200 shrink-0">❌ Belum Dikerjakan (Nilai 0)</span>`;
+    } else if (it.status === 'belum_kumpul') {
+      badge = `<span class="text-[10px] font-extrabold bg-rose-50 text-rose-600 px-2.5 py-1 rounded-full border border-rose-200 shrink-0">❌ Belum Dikumpulkan${it.terlambat ? ' (Lewat Tenggat)' : ''}</span>`;
+    } else if (it.status === 'sudah_kumpul') {
+      badge = `<span class="text-[10px] font-extrabold bg-emerald-50 text-emerald-600 px-2.5 py-1 rounded-full border border-emerald-200 shrink-0">✅ Sudah Dikumpulkan</span>`;
+    } else {
+      badge = `<span class="text-[10px] font-extrabold bg-emerald-50 text-emerald-600 px-2.5 py-1 rounded-full border border-emerald-200 shrink-0">✅ Sudah Dikerjakan</span>`;
     }
+
+    let blokUpload = '';
+    if (bisaUpload && it.materiId && (it.status === 'belum_kumpul' || it.status === 'belum_dikerjakan')) {
+      const infoSudah = it.sub
+        ? `<p class="text-[10px] font-bold text-emerald-600 mt-2">📎 Sudah diupload: ${it.sub.fileName} — menunggu guru menilai</p>`
+        : '';
+      blokUpload = `
+        <div class="mt-2 pt-2 border-t border-slate-100">
+          ${infoSudah}
+          <div class="flex items-center gap-2 mt-1.5">
+            <input type="file" id="file-tugas-${it.materiId}" class="text-[10px] flex-1 min-w-0">
+            <button onclick="uploadTugasFile('${it.materiId}', '${it.guruId}', '${it.mapel}', this)" class="shrink-0 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold rounded-lg transition">${it.sub ? 'Ganti File' : '📤 Upload'}</button>
+          </div>
+        </div>`;
+    }
+
+    return `
+      <div class="py-1.5 bg-white/60 px-3 rounded-xl">
+        <div class="flex items-center justify-between gap-3">
+          <div class="min-w-0">
+            <p class="text-xs font-bold text-slate-700 truncate">${it.judul}</p>
+            <p class="text-[10px] text-slate-400 font-semibold">${it.jenis}</p>
+          </div>
+          ${badge}
+        </div>
+        ${blokUpload}
+      </div>
+    `;
+  }).join('');
+}
 
     async function loadDaftarMateriSiswa(guruKelasMap) {
       const guruIds = Object.keys(guruKelasMap);
@@ -3701,7 +3784,7 @@ items.sort((a, b) => prioritas(a.status) - prioritas(b.status) || b.ts - a.ts);
         const docId = `${materiId}_${currentUser._id}`;
 
         const ext = file.name.includes('.') ? '.' + file.name.split('.').pop() : '';
-        const storagePath = `tugas/${docId}${ext}`;
+        const storagePath = `tugas/${docId.replace(/[^a-zA-Z0-9_.-]/g, '_')}${ext}`;
 
         const { error: uploadError } = await supabaseClient.storage
           .from('tugas-siswa')
@@ -3726,9 +3809,7 @@ items.sort((a, b) => prioritas(a.status) - prioritas(b.status) || b.ts - a.ts);
         });
 
         alert('✅ Tugas berhasil diupload!');
-        const allSiswaDocs = await dbSiswa.allDocs({ include_docs: true });
-        const mapelDocsSiswa = allSiswaDocs.rows.map(r => r.doc).filter(d => d.nis === currentUser._id);
-        const guruKelasMap = {};
+renderDashboardSiswa();
         mapelDocsSiswa.forEach(d => { guruKelasMap[d.guru_id] = d.kelas; });
         loadDaftarMateriSiswa(guruKelasMap);
       } catch (err) {
